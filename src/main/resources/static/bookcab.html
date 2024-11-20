@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cab Booking Form</title>
+    <link rel="stylesheet" href="bookcabstyles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 400px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="form-section">
+            <h2>Send us a message</h2>
+            <form id="cabForm" method="post"">
+                <!-- From Location and To Location Fields -->
+                <div class="input-group">
+                    <div>
+                        <label for="fromLocation">Pickup Location*</label>
+                        <input type="text" id="fromLocation" name="fromLocation" placeholder="Select pickup location" required>
+                    </div>
+                    <div>
+                        <label for="toLocation">Dropoff Location*</label>
+                        <input type="text" id="toLocation" name="toLocation" placeholder="Select dropoff destination" required>
+                    </div>
+                </div>
+
+                <!-- Type of Cab Dropdown -->
+                <div class="input-group">
+                    <div>
+                        <label for="typeOfCab">Type of Cab*</label>
+                        <select id="typeOfCab" name="typeOfCab" required>
+                            <option value="" disabled selected>--</option>
+                            <option value="Sedan">Sedan</option>
+                            <option value="SUV">SUV</option>
+                            <option value="Luxury Sedan">Luxury Sedan</option>
+                            <option value="Luxury SUV">Luxury SUV</option>
+                            <option value="Limousine">Limousine</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="btn">Book Trip</button>
+               
+            </form>
+        </div>
+        
+<!--          <div th:if="${fare != null}"> -->
+<!--             <p>Your estimated fare is: <span th:text="${fare}"></span></p> -->
+<!--         </div> -->
+<!--         <div th:if="${fare == null}"> -->
+<!--             <p>We couldn't calculate the fare. Please check your input.</p> -->
+<!--         </div> -->
+        
+
+        <!-- Map Section -->
+        <div class="map-section">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map with default coordinates
+        var map = L.map('map').setView([51.505, -0.09], 13); // Default to London
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        var pickupMarker = null; // Store the pickup marker
+        var dropoffMarker = null; // Store the dropoff marker
+        var routeLine = null; // Store the route line (polyline)
+
+        // Geocode function using OpenCage API
+        function geocode(location, callback) {
+            const apiKey = '7a684043f61c4e80b2f6472a5ddcff56';  // Replace with your OpenCage API key
+            fetch(`https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${apiKey}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.results.length > 0) {
+                        const coordinates = data.results[0].geometry;
+                        callback([coordinates.lat, coordinates.lng]);
+                    } else {
+                        console.log('Location not found: ' + location);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error with geocoding:', error);
+                });
+        }
+
+        // Function to update the map for the Pickup Location as the user types
+        function updatePickupLocation() {
+            const fromLocation = document.getElementById('fromLocation').value;
+
+            if (fromLocation) {
+                // Geocode Pickup Location
+                geocode(fromLocation, function(fromCoords) {
+                    console.log("Pickup Coordinates:", fromCoords); // Log pickup coordinates
+                    
+                    // If a previous pickup marker exists, remove it
+                    if (pickupMarker) {
+                        map.removeLayer(pickupMarker);
+                    }
+
+                    // Add a marker for the Pickup Location
+                    pickupMarker = L.marker(fromCoords).addTo(map)
+                        .bindPopup('Pickup: ' + fromLocation)
+                        .openPopup();
+
+                    // Center the map on the Pickup Location
+                    map.setView(fromCoords, 13);
+
+                    // Check if the Dropoff Location is also filled, if so show the route
+                    const toLocation = document.getElementById('toLocation').value;
+                    if (toLocation) {
+                        updateRoute(fromCoords);
+                    }
+                });
+            }
+        }
+
+        // Function to update the map with Pickup and Dropoff locations and show the route
+        function updateRoute(pickupCoords) {
+            const toLocation = document.getElementById('toLocation').value;
+
+            if (toLocation) {
+                // Geocode Dropoff Location
+                geocode(toLocation, function(toCoords) {
+                    console.log("Dropoff Coordinates:", toCoords); // Log dropoff coordinates
+                    
+                    // If a previous dropoff marker exists, remove it
+                    if (dropoffMarker) {
+                        map.removeLayer(dropoffMarker);
+                    }
+
+                    // Add a marker for the Dropoff Location
+                    dropoffMarker = L.marker(toCoords).addTo(map)
+                        .bindPopup('Dropoff: ' + toLocation)
+                        .openPopup();
+
+                    // Fit the map view to show both Pickup and Dropoff locations
+                    var bounds = L.latLngBounds([pickupCoords, toCoords]);
+                    map.fitBounds(bounds, { padding: [50, 50] });
+
+                    // Draw a route (polyline) between Pickup and Dropoff
+                    if (routeLine) {
+                        map.removeLayer(routeLine);  // Remove the previous route if it exists
+                    }
+                    routeLine = L.polyline([pickupCoords, toCoords], { color: 'blue' }).addTo(map);
+                });
+            }
+        }
+
+        // Add input event listeners for real-time updates
+        document.getElementById('fromLocation').addEventListener('input', updatePickupLocation);
+        document.getElementById('toLocation').addEventListener('input', function() {
+            if (pickupMarker) {
+                updateRoute(pickupMarker.getLatLng());
+            }
+        });
+    </script>
+    
+    
+<!-- <!-- 	 <script> --> 
+<!-- //         // Capture the form submission -->
+<!-- //         document.getElementById('cabForm').addEventListener('submit', function(event) { -->
+<!-- //             event.preventDefault();  // Prevent default form submission -->
+
+<!-- //             // Get form data -->
+<!-- //             const fromLocation = document.getElementById('fromLocation').value; -->
+<!-- //             const toLocation = document.getElementById('toLocation').value; -->
+<!-- //             const typeOfCab = document.getElementById('typeOfCab').value; -->
+            
+<!-- //             // Create an object to hold the data -->
+<!-- //             const formData = { -->
+<!-- //                 fromLocation: fromLocation, -->
+<!-- //                 toLocation: toLocation, -->
+<!-- //                 typeOfCab: typeOfCab -->
+<!-- //             }; -->
+
+<!-- //             // Send data to the backend using fetch -->
+<!-- //             fetch('http://localhost:8082/bookcab/addbooking', { -->
+<!-- //                 method: 'POST',  // HTTP method -->
+<!-- //                 headers: { -->
+<!-- //                     'Content-Type': 'application/json',  // Sending JSON -->
+<!-- //                 }, -->
+<!-- //                 body: JSON.stringify(formData)  // Convert the data to JSON -->
+<!-- //             }) -->
+<!-- //             .then(response => response.json())  // Parse JSON response -->
+<!-- //             .then(data => { -->
+<!-- //                 console.log('Success:', data);  // Handle success -->
+<!-- //             }) -->
+<!-- //             .catch((error) => { -->
+<!-- //                 console.error('Error:', error);  // Handle errors -->
+<!-- //             }); -->
+<!-- //         }); -->
+<!-- <!--     </script> -->
+    
+    <script>
+		document.getElementById('cabForm').addEventListener('submit', function(event) {
+				});
+	</script>
+    
+</body>
+</html>
